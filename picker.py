@@ -1,7 +1,11 @@
+#!/usr/bin/env python3.12
+
 import pandas as pd
 import numpy as np
 from scraper import getDatFromSymbol
 import datetime
+
+import matplotlib.pyplot as plt
 
 MARGIN = 1 # 1 percent
 
@@ -56,39 +60,56 @@ def isKeeper(stock_dat, strategy):
 			upper = target + margin
 
 			if (current_val >= lower and current_val <= upper and p[0] > 0):
-				
+				"""
 				plt.plot(lin_x, dat_arr)
 				plt.plot(lin_x, lin_y)
 				plt.plot(lin_x, (lin_y-sigma))
 				plt.plot(lin_x, (lin_y+sigma))
 				plt.show()
-				
-				return True
-			return False
+				"""
+				return p[0]
+			return None
 
 		case _:
 			return False
 
 # script start
-stock_list = pd.read_csv("stocks.csv")
+stock_list = pd.read_csv("stocklist/stocks.csv")
 
 # run through list
-keepers = []
+keepers_dma = []
+keepers_lg = []
+failures = []
 for _, row in stock_list.iterrows():
 	symbol = row['Symbol']
 	print("Checking...", symbol)
 
 	market = "none" if pd.isna(row['Market']) else row['Market']
 
-	dat = getDatFromSymbol(symbol, market=market, span=1)
-	dat = dat[(dat.Close != "-")]
-	dat = dat.apply(pd.to_numeric)
+	try:
+		dat = getDatFromSymbol(symbol, market=market, span=1, offset=1)
+		dat = dat[(dat.Close != "-")]
+		dat = dat.apply(pd.to_numeric)
+	except:
+		print("Failed getting data for:", symbol)
+		failures.append(symbol)
 
-	if isKeeper(dat, strategy="Linear Regression"):
-		keepers.append(row)
+	try:
+		if isKeeper(dat, strategy="DMA Proximity"):
+			keepers_dma.append(row)
+			
+		m = isKeeper(dat, strategy="Linear Regression")
+		if m is not None:
+			row.append(round(m, 2))
+			keepers_lg.append(row)
+	except:
+		print("Failed evaluating:", symbol)
+		failures.append(symbol)
 
 # configure output
 output = pd.DataFrame(keepers)
 timestamp = datetime.datetime.now().isoformat()
+
+print("Failures: ", failures)
 
 output.to_csv("output/picks_"+timestamp+".csv")
