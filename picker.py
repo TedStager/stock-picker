@@ -2,10 +2,11 @@
 
 import pandas as pd
 import numpy as np
-from scraper import getDatFromSymbol
 import datetime
-
 import matplotlib.pyplot as plt
+
+from scraper import getDatFromSymbol
+
 
 MARGIN = 1 # 1 percent
 
@@ -67,7 +68,7 @@ def isKeeper(stock_dat, strategy):
 				plt.plot(lin_x, (lin_y+sigma))
 				plt.show()
 				"""
-				return p[0]
+				return (p[0], lin_y[-1], sigma)
 			return None
 
 		case _:
@@ -78,7 +79,7 @@ stock_list = pd.read_csv("stocklist/stocks.csv")
 
 # run through list
 keepers_dma = []
-keepers_lg = []
+keepers_lr = []
 failures = []
 for _, row in stock_list.iterrows():
 	symbol = row['Symbol']
@@ -87,7 +88,7 @@ for _, row in stock_list.iterrows():
 	market = "none" if pd.isna(row['Market']) else row['Market']
 
 	try:
-		dat = getDatFromSymbol(symbol, market=market, span=1, offset=1)
+		dat = getDatFromSymbol(symbol, market=market, span=1)
 		dat = dat[(dat.Close != "-")]
 		dat = dat.apply(pd.to_numeric)
 	except:
@@ -97,19 +98,30 @@ for _, row in stock_list.iterrows():
 	try:
 		if isKeeper(dat, strategy="DMA Proximity"):
 			keepers_dma.append(row)
-			
-		m = isKeeper(dat, strategy="Linear Regression")
-		if m is not None:
-			row.append(round(m, 2))
-			keepers_lg.append(row)
-	except:
+
+		lr = isKeeper(dat, strategy="Linear Regression")
+		# lr is (m, b, sigma)
+		if lr is not None:
+			row["Slope"] = round(lr[0], 6)
+			row["Y Int."] = round(lr[1], 2)
+			row["Std. Dev."] = round(lr[2], 2)
+			keepers_lr.append(row)
+	except Exception as e:
 		print("Failed evaluating:", symbol)
+		print("Error:", e)
 		failures.append(symbol)
 
 # configure output
-output = pd.DataFrame(keepers)
-timestamp = datetime.datetime.now().isoformat()
+output_lr = pd.DataFrame(keepers_lr)
+output_dma = pd.DataFrame(keepers_dma)
+timestamp = datetime.datetime.now().strftime('%Y-%m-%d')
 
 print("Failures: ", failures)
 
-output.to_csv("output/picks_"+timestamp+".csv")
+lr_name = "output/lr_picks_"+timestamp+".csv"
+dma_name = "output/dma_picks_"+timestamp+".csv"
+
+output_lr.to_csv("output/lr_picks_"+timestamp+".csv")
+output_dma.to_csv("output/dma_picks_"+timestamp+".csv")
+
+
